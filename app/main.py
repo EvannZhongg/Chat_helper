@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import import_router, profile_router, event_router # 确保导入所有三个路由
+from app.routers import import_router, profile_router, event_router, persona_router # 1. 导入 persona_router
 from app.core.config import settings
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +38,7 @@ print("--- main.py: CORS middleware added ---")
 app.include_router(import_router.router)
 app.include_router(profile_router.router)
 app.include_router(event_router.router) # 确保事件路由被包含
+app.include_router(persona_router.router) # 2. 包含新路由
 
 # --- main.py: Routers included ---
 print("--- main.py: Routers included ---")

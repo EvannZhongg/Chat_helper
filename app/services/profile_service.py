@@ -1,12 +1,17 @@
 import json
 import os
-from typing import List
+# [MODIFIED] 导入 List 和 Optional
+from typing import List, Optional, Tuple, Set
 from app.core.config import settings
-# [修改] 导入 Event 模型
-from app.core.models import Profile, Message, Event, UpdateProfileNamesRequest 
+# [MODIFIED] 导入所有需要的模型，包括新的 Persona 和 Insight 模型
+from app.core.models import (
+    Profile, Message, Event, UpdateProfileNamesRequest,
+    UserPersona, OpponentPersona, ContextualInsight
+)
 from fastapi import HTTPException
-import glob 
+import glob
 import datetime
+from zoneinfo import ZoneInfo # [新增] 用于时区转换
 
 # 确保数据目录存在
 os.makedirs(settings.DATA_PATH, exist_ok=True)
@@ -16,12 +21,32 @@ def get_profile_path(profile_id: str) -> str:
     """获取主 Profile JSON 文件的路径"""
     return os.path.join(settings.DATA_PATH, f"profile_{profile_id}.json")
 
+
 # [新增] 获取 Event JSON 文件的路径
 def get_event_path(profile_id: str) -> str:
     """获取事件 JSON 文件的路径"""
     return os.path.join(settings.DATA_PATH, f"event_{profile_id}.json")
 
-# [新增] 加载事件列表的辅助函数
+
+# --- [新增] Persona 路径辅助函数 ---
+def get_user_persona_path(profile_id: str) -> str:
+    """获取用户画像 JSON 文件的路径"""
+    return os.path.join(settings.DATA_PATH, f"persona_user_{profile_id}.json")
+
+
+def get_opponent_persona_path(profile_id: str) -> str:
+    """获取对方画像 JSON 文件的路径"""
+    return os.path.join(settings.DATA_PATH, f"persona_opponent_{profile_id}.json")
+
+
+# --- [新增] Insight 路径辅助函数 ---
+def get_insights_path(profile_id: str) -> str:
+    """获取上下文洞察 JSON 文件的路径"""
+    return os.path.join(settings.DATA_PATH, f"insights_{profile_id}.json")
+
+
+# --- Event Load/Save ---
+
 def load_events(profile_id: str) -> List[Event]:
     """从单独的文件加载事件列表"""
     filepath = get_event_path(profile_id)
@@ -34,9 +59,9 @@ def load_events(profile_id: str) -> List[Event]:
             return [Event(**event_dict) for event_dict in events_data]
     except (json.JSONDecodeError, Exception) as e:
         print(f"Warning: Could not load or parse events file {filepath}: {e}")
-        return [] # 出错时返回空列表
+        return []  # 出错时返回空列表
 
-# [新增] 保存事件列表的辅助函数
+
 def save_events(profile_id: str, events: List[Event]):
     """将事件列表保存到单独的文件"""
     filepath = get_event_path(profile_id)
@@ -46,117 +71,240 @@ def save_events(profile_id: str, events: List[Event]):
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(events_dict_list, f, indent=4, ensure_ascii=False)
     except Exception as e:
-        # 这里使用 HTTPException 可能不太合适，因为这不是直接的API响应
-        # 改为打印错误，实际应用中应考虑更健壮的错误处理
         print(f"!!! ERROR SAVING EVENTS for profile {profile_id}: {e}")
         # raise HTTPException(status_code=500, detail=f"Failed to save events: {e}")
 
 
-# [修改] get_profile 函数
+# --- Persona (User) Load/Save ---
+
+def load_user_persona(profile_id: str) -> Optional[UserPersona]:
+    """从单独的文件加载用户画像"""
+    filepath = get_user_persona_path(profile_id)
+    if not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return UserPersona(**data)
+    except Exception as e:
+        print(f"Warning: Could not load or parse user persona {filepath}: {e}")
+        return None
+
+
+def save_user_persona(persona: UserPersona):
+    """将用户画像保存到单独的文件"""
+    filepath = get_user_persona_path(persona.profile_id)
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(persona.model_dump(mode='json'), f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"!!! ERROR SAVING USER PERSONA for profile {persona.profile_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save user persona: {e}")
+
+
+# --- Persona (Opponent) Load/Save ---
+
+def load_opponent_persona(profile_id: str) -> Optional[OpponentPersona]:
+    """从单独的文件加载对方画像"""
+    filepath = get_opponent_persona_path(profile_id)
+    if not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return OpponentPersona(**data)
+    except Exception as e:
+        print(f"Warning: Could not load or parse opponent persona {filepath}: {e}")
+        return None
+
+
+def save_opponent_persona(persona: OpponentPersona):
+    """将对方画像保存到单独的文件"""
+    filepath = get_opponent_persona_path(persona.profile_id)
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(persona.model_dump(mode='json'), f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"!!! ERROR SAVING OPPONENT PERSONA for profile {persona.profile_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save opponent persona: {e}")
+
+
+# --- [新增] Contextual Insight Load/Save ---
+
+def get_insights_path(profile_id: str) -> str:
+    """获取上下文洞察 JSON 文件的路径"""
+    return os.path.join(settings.DATA_PATH, f"insights_{profile_id}.json")
+
+def load_insights(profile_id: str) -> List[ContextualInsight]:
+    """从单独的文件加载上下文洞察列表"""
+    filepath = get_insights_path(profile_id)
+    if not os.path.exists(filepath):
+        return []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data_list = json.load(f)
+            insights = []
+            for data in data_list:
+                # [修改] 手动处理日期和 Set 的转换
+                data['analysis_date'] = datetime.date.fromisoformat(data['analysis_date'])
+                data['processed_item_ids'] = set(data.get('processed_item_ids', [])) # 兼容旧数据
+                insights.append(ContextualInsight(**data))
+            return insights
+    except Exception as e:
+        print(f"Warning: Could not load or parse insights {filepath}: {e}")
+        return []
+
+def save_insights(profile_id: str, insights: List[ContextualInsight]):
+    """将上下文洞察列表保存到单独的文件"""
+    filepath = get_insights_path(profile_id)
+    try:
+        def json_serializer(obj):
+            """JSON 序列化器，处理 date 和 set"""
+            if isinstance(obj, datetime.date):
+                return obj.isoformat()
+            if isinstance(obj, set):
+                return list(obj) # 将 set 转为 list 存储
+            raise TypeError(f"Type {type(obj)} not serializable")
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            # [修改] 使用 default=json_serializer 处理特殊类型
+            json.dump(
+                [item.model_dump(mode='json') for item in insights],
+                f, indent=4, ensure_ascii=False, default=json_serializer
+            )
+    except Exception as e:
+        print(f"!!! ERROR SAVING INSIGHTS for profile {profile_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save insights")
+
+def get_profile_date_range(profile_id: str) -> Optional[Tuple[datetime.date, datetime.date]]:
+    """计算 Profile 中所有消息和事件的最早和最晚日期"""
+    try:
+        profile = get_profile(profile_id) # 加载 Profile (包含 messages 和 events)
+    except HTTPException:
+        return None
+
+    all_timestamps = [m.timestamp for m in profile.messages] + [e.timestamp for e in profile.events]
+
+    if not all_timestamps:
+        return None
+
+    # 确保所有时间戳都是 aware 的 (转换为 UTC)
+    aware_timestamps = [_normalize_to_utc(ts) for ts in all_timestamps]
+
+    min_ts = min(aware_timestamps)
+    max_ts = max(aware_timestamps)
+
+    # 转换为本地日期 (假设服务器/用户在东八区)
+    # 注意：这里我们只关心日期，时区影响较小，但最好明确
+    local_tz = ZoneInfo("Asia/Shanghai") # 或者 "Etc/GMT-8"
+    min_date_local = min_ts.astimezone(local_tz).date()
+    max_date_local = max_ts.astimezone(local_tz).date()
+
+    return min_date_local, max_date_local
+
+# --- Core Profile Functions ---
+def check_if_date_analyzed(profile_id: str, analysis_date: datetime.date) -> bool:
+    """检查指定日期是否已存在对应的 Insight"""
+    insights = load_insights(profile_id)
+    return any(insight.analysis_date == analysis_date for insight in insights)
+
 def get_profile(profile_id: str) -> Profile:
     """
     获取 Profile 数据，并合并从单独文件加载的事件列表。
+    (注意: 此函数不加载 Persona 或 Insights，它们是独立获取的)
     """
     filepath = get_profile_path(profile_id)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Profile not found")
-    
+
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            # 1. 加载主 Profile 数据 (可能包含旧的 events 字段)
+            # 1. 加载主 Profile 数据
             profile_data = json.load(f)
             # 2. [重要] 创建 Profile 对象时，忽略文件中的 'events' 字段
             profile = Profile(**{k: v for k, v in profile_data.items() if k != 'events'})
-            
+
             # 3. 从单独的文件加载事件
             loaded_events = load_events(profile_id)
-            
+
             # 4. 将加载的事件附加到 Profile 对象上
             profile.events = loaded_events
-            
+
             return profile
-            
+
     except Exception as e:
         print(f"Error loading profile {profile_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load profile data: {e}")
 
 
-# [修改] save_profile 函数
 def save_profile(profile: Profile):
     """
     保存主 Profile 数据，[重要] 排除 events 字段。
+    (注意: 此函数不保存 Persona 或 Insights)
     """
     filepath = get_profile_path(profile.profile_id)
     try:
         # 1. [重要] 序列化时排除 events 字段
         profile_dict = profile.model_dump(mode='json', exclude={'events'})
-        
+
         # 2. 写入主 Profile 文件
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(profile_dict, f, indent=4, ensure_ascii=False)
-            
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save profile: {e}")
 
 
 def _normalize_to_utc(ts: datetime.datetime) -> datetime.datetime:
-    # ... (此函数保持不变) ...
+    """(此函数保持不变)"""
     if ts.tzinfo is None:
         return ts.replace(tzinfo=datetime.timezone.utc)
     return ts.astimezone(datetime.timezone.utc)
 
 
-# [修改] add_event_to_profile 函数
+# --- Data Update Functions ---
+
 def add_event_to_profile(profile_id: str, event: Event) -> Profile:
     """
     添加一个新事件到单独的事件文件，并按时间排序后保存。
     最后返回完整的 Profile 对象 (包含更新后的事件列表)。
     """
-    # 1. 加载现有的事件
     current_events = load_events(profile_id)
-    
-    # 2. 添加新事件
     current_events.append(event)
-    
-    # 3. 按时间戳排序事件列表
     current_events.sort(key=lambda e: _normalize_to_utc(e.timestamp))
-    
-    # 4. 保存更新后的事件列表到单独文件
     save_events(profile_id, current_events)
-    
-    # 5. [重要] 重新加载完整的 Profile (现在会包含新保存的事件) 并返回
-    #    这确保了 API 响应与之前的行为一致
+
+    # 重新加载完整的 Profile (现在会包含新保存的事件) 并返回
     return get_profile(profile_id)
 
 
 def add_messages_to_profile(profile_id: str, messages: List[Message]) -> Profile:
-    # ... (此函数保持不变，它只操作主 profile 文件) ...
+    """(此函数保持不变，它只操作主 profile 文件)"""
     profile = get_profile(profile_id)
     profile.messages.extend(messages)
     profile.messages.sort(key=lambda m: _normalize_to_utc(m.timestamp))
     new_hashes_to_process = set()
-    for msg in messages: 
+    for msg in messages:
         if msg.source_image_hash and msg.source_image_hash != 'manual_entry':
             new_hashes_to_process.add(msg.source_image_hash)
     for hash_val in new_hashes_to_process:
         if hash_val not in profile.processed_sources:
             profile.processed_sources.append(hash_val)
-    # [重要] 调用修改后的 save_profile，它会自动排除 events
-    save_profile(profile) 
-    # get_profile 会重新加载并附加 events
-    return get_profile(profile_id) 
+
+    save_profile(profile)
+    return get_profile(profile_id)
 
 
 def add_processed_source(profile_id: str, image_hash: str):
-    # ... (此函数保持不变) ...
+    """(此函数保持不变)"""
     profile = get_profile(profile_id)
     if image_hash not in profile.processed_sources:
         profile.processed_sources.append(image_hash)
-        save_profile(profile) # save_profile 会排除 events
+        save_profile(profile)
 
 
 def check_if_source_processed(profile_id: str, image_hash: str) -> bool:
-    # ... (此函数保持不变) ...
+    """(此函数保持不变)"""
     try:
         profile = get_profile(profile_id)
         return image_hash in profile.processed_sources
@@ -167,30 +315,26 @@ def check_if_source_processed(profile_id: str, image_hash: str) -> bool:
 
 
 def list_all_profiles() -> List[Profile]:
-    # ... (此函数逻辑不变，但现在 get_profile 会合并事件) ...
+    """(此函数逻辑不变，get_profile 会自动合并事件)"""
     profiles = []
     search_path = os.path.join(settings.DATA_PATH, "profile_*.json")
     for filepath in glob.glob(search_path):
         try:
-            # 提取 profile_id 从文件名
             profile_id = os.path.basename(filepath).replace("profile_", "").replace(".json", "")
-            # 调用 get_profile 来加载主数据并合并事件
             profiles.append(get_profile(profile_id))
         except Exception as e:
-             print(f"Warning: Skipping profile file {filepath} due to error: {e}")
-             continue
+            print(f"Warning: Skipping profile file {filepath} due to error: {e}")
+            continue
     profiles.sort(key=lambda p: p.created_at, reverse=True)
     return profiles
 
 
 def update_profile(profile_id: str, updates: UpdateProfileNamesRequest) -> Profile:
-    # ... (此函数保持不变) ...
+    """(此函数保持不变)"""
     profile = get_profile(profile_id)
     update_data = updates.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No update data provided")
     updated_profile = profile.model_copy(update=update_data)
-    save_profile(updated_profile) # save_profile 会排除 events
-    # get_profile 会重新加载并附加 events
-    return get_profile(profile_id) 
-
+    save_profile(updated_profile)
+    return get_profile(profile_id)
