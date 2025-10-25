@@ -35,6 +35,10 @@ function ProfileDetail() {
         <Link to={`/profile/${profileId}/upload`}>
           <button>上传聊天截图 (Phase 1)</button>
         </Link>
+
+        <Link to={`/profile/${profileId}/events/new`}>
+          <button className="secondary">上传离线事件</button>
+        </Link>
         <button disabled>分析画像 (Phase 2)</button>
         <button disabled>对话辅助 (Phase 3)</button>
       </nav>

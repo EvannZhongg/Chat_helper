@@ -1,8 +1,25 @@
 import React from 'react';
 
-// [移除] const styles = { ... } (所有样式都移到 APP.css 了)
+// [新增] 定义内容类型选项，包含您要求的中文标签
+const contentTypeOptions = [
+  { value: 'text', label: '文本' },
+  { value: 'image', label: '图片' },
+  { value: 'video', label: '视频' },
+  { value: 'transfer', label: '转账' },
+  { value: 'emoji', label: '表情' },
+  { value: 'system', label: '系统' },
+  { value: 'unknown', label: '未知' },
+];
 
-function EditableMessage({ message, profile, onChange }) {
+function EditableMessage({
+  message,
+  profile,
+  onChange,
+  onMove,
+  onDelete,
+  isFirstInGroup,
+  isLastInGroup
+}) {
 
   const nameMap = {
     'User 1': profile.user_name || 'User 1 (我)',
@@ -12,14 +29,13 @@ function EditableMessage({ message, profile, onChange }) {
 
   const handleTimestampChange = (e) => {
     try {
-        // 允许输入为空
         if (!e.target.value) {
             onChange('timestamp', null);
             return;
         }
         const isoString = new Date(e.target.value).toISOString();
         onChange('timestamp', isoString);
-    } catch(e) {
+    } catch(_e) {
         // 忽略无效日期
     }
   };
@@ -28,26 +44,24 @@ function EditableMessage({ message, profile, onChange }) {
     try {
         if (!isoString) return '';
         const date = new Date(isoString);
-        // 检查日期是否有效
         if (isNaN(date.getTime())) return '';
-        // 修复时区问题：转换为本地时间再截取
         const offset = date.getTimezoneOffset();
         const localDate = new Date(date.getTime() - (offset * 60000));
         return localDate.toISOString().slice(0, 16);
-    } catch (e) {
+    } catch (_e) {
         return '';
     }
   };
 
-  // [修改] 动态 className
   const containerClasses = [
     'editable-message',
-    `type-${message.content_type}`,
-    message.is_editable ? 'is-editable' : ''
+    message.is_editable ? 'error' : '',
+    `type-${message.content_type}`
   ].join(' ');
 
   return (
     <div className={containerClasses}>
+      {/* 1. 发送者 */}
       <select
         value={message.sender}
         onChange={(e) => onChange('sender', e.target.value)}
@@ -57,29 +71,69 @@ function EditableMessage({ message, profile, onChange }) {
         <option value="system">{nameMap['system']}</option>
       </select>
 
+      {/* 2. [新增] 内容类型 */}
+      <select
+        className="message-type-select"
+        value={message.content_type}
+        onChange={(e) => onChange('content_type', e.target.value)}
+      >
+        {contentTypeOptions.map(opt => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+
+      {/* 3. 时间戳 */}
       <input
         type="datetime-local"
+        className={
+          (message.auto_filled_date || message.auto_filled_time)
+          ? 'autofilled-time'
+          : ''
+        }
         value={formatISODateForInput(message.timestamp)}
         onChange={handleTimestampChange}
-        step="1" // 允许选择到秒 (如果需要)
       />
 
-      {/* [修改] 使用 className 和条件渲染 */}
+      {/* 4. 内容 */}
       <input
         type="text"
         className="text-input"
-        placeholder="文本内容"
+        placeholder="文本 / 媒体描述 / 系统消息..."
         value={message.text || ''}
         onChange={(e) => onChange('text', e.target.value)}
       />
 
-       <input
-        type="text"
-        className="media-input"
-        placeholder="媒体/系统描述 (e.g., [图片])"
-        value={message.media_description || ''}
-        onChange={(e) => onChange('media_description', e.target.value)}
-      />
+      {/* 5. 控制按钮 */}
+      <div className="message-controls">
+        <div className="message-sort-controls-group">
+          <button
+            className="message-sort-btn"
+            title="上移"
+            onClick={() => onMove('up')}
+            disabled={isFirstInGroup}
+          >
+            ↑
+          </button>
+          <button
+            className="message-sort-btn"
+            title="下移"
+            onClick={() => onMove('down')}
+            disabled={isLastInGroup}
+          >
+            ↓
+          </button>
+        </div>
+
+        <button
+          className="message-delete-btn"
+          title="删除此条"
+          onClick={onDelete}
+        >
+          &times;
+        </button>
+      </div>
     </div>
   );
 }
