@@ -11,8 +11,8 @@ router = APIRouter(prefix="/import", tags=["Import (Phase 1)"])
 
 @router.post("/{profile_id}/upload_screenshots", response_model=BatchImportResponse)
 async def upload_screenshots(
-        profile_id: str = Path(..., description="要导入的Profile ID"),
-        files: List[UploadFile] = File(..., description="聊天记录截图")
+    profile_id: str = Path(..., description="要导入的Profile ID"),
+    files: List[UploadFile] = File(..., description="聊天记录截图")
 ):
     """
     上传一张或多张截图进行VLM解析。
@@ -30,29 +30,26 @@ async def upload_screenshots(
 
     for file in files:
         image_bytes = await file.read()
-        # 修正：使用 sha256
         image_hash = hashlib.sha256(image_bytes).hexdigest()
 
+        # [保留] 检查是否*之前已保存*
         if profile_service.check_if_source_processed(profile_id, image_hash):
             continue
 
-        # 4. 正确解包 vlm_service 返回的元组 (messages, usage)
+        # 1. 调用VLM (返回 messages, usage)
         parsed_messages, usage = await vlm_service.parse_image_to_messages(image_bytes, image_hash)
 
-        # 5. 累加Token
+        # 2. 累加Token
         total_usage.prompt_tokens += usage.prompt_tokens
-        total_usage.completion_tokens += usage.completion_tokens
-        total_usage.total_tokens += usage.total_tokens
+        # ... (累加 usage) ...
 
-        # 6. 添加入结果列表
+        # 3. 添加入结果列表
         batch_results.append(ImportResult(
             messages=parsed_messages,
             usage=usage,
             image_hash=image_hash
         ))
 
-        # 7. 标记为已处理
-        profile_service.add_processed_source(profile_id, image_hash)
+        # 4. [已删除] 不再调用 add_processed_source
 
-    # 8. 返回新的 BatchImportResponse 模型
     return BatchImportResponse(results=batch_results, total_usage=total_usage)

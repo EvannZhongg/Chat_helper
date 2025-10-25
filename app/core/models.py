@@ -9,10 +9,8 @@ class VLMMessageItem(BaseModel):
     sender: Literal["User 1", "User 2"]
     date: Optional[str] = None  # VLM识别的日期 (YYYY-MM-DD)
     time: Optional[str] = None  # VLM识别的时间 (HH:MM)
-    content_type: Literal["text", "image", "transfer", "emoji", "system", "unknown"]
-    text: Optional[str] = None  # 文本内容
-    description: Optional[str] = None  # 对非文本内容的描述
-
+    content_type: Literal["text", "image", "transfer", "emoji", "system", "unknown", "video"]
+    text: Optional[str] = None
 
 # VLM必须返回的JSON格式
 class VLMResponseModel(BaseModel):
@@ -24,14 +22,15 @@ class Message(BaseModel):
     message_id: str = Field(default_factory=lambda: f"msg_{uuid.uuid4().hex}")
     timestamp: datetime.datetime
     sender: str  # "User 1", "User 2" 或 "system" (后续会被替换为 "我", "Boss")
-    content_type: Literal["text", "image", "transfer", "emoji", "system", "unknown"]
+    content_type: Literal["text", "image", "transfer", "emoji", "system", "unknown", "video"]
     text: Optional[str] = None
-    media_description: Optional[str] = None  # VLM对图片/表情包的描述
 
     # --- 阶段一新增字段 ---
     source_image_hash: Optional[str] = None  # 关联到源截图
     is_editable: bool = False  # 标记此消息是否为VLM失败的模板
     raw_vlm_output: Optional[str] = None  # 存储VLM原始输出，用于调试
+    auto_filled_date: bool = Field(default=False)
+    auto_filled_time: bool = Field(default=False)
 
 
 # Profile 档案

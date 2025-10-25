@@ -46,13 +46,32 @@ def _normalize_to_utc(ts: datetime.datetime) -> datetime.datetime:
     # 将 Aware (带时区) 时间统一转换为 UTC
     return ts.astimezone(datetime.timezone.utc)
 
+
 def add_messages_to_profile(profile_id: str, messages: List[Message]) -> Profile:
+    """
+    保存消息列表，并 [新增] 将这些消息的图源 Hash 标记为已处理。
+    """
     profile = get_profile(profile_id)
+
+    # 1. 添加新消息
     profile.messages.extend(messages)
 
-    # 核心要求：所有聊天记录按时间顺序排序
+    # 2. 核心要求：所有聊天记录按时间顺序排序
+    # (确保你已经有了 _normalize_to_utc 辅助函数)
     profile.messages.sort(key=lambda m: _normalize_to_utc(m.timestamp))
 
+    # 3. [新增逻辑] 从刚刚保存的 *新消息* 中提取图源 Hash
+    new_hashes_to_process = set()
+    for msg in messages:  # 'messages' 是新提交的列表
+        if msg.source_image_hash and msg.source_image_hash != 'manual_entry':
+            new_hashes_to_process.add(msg.source_image_hash)
+
+    # 4. [新增逻辑] 将这些新 Hash 添加到 processed_sources
+    for hash_val in new_hashes_to_process:
+        if hash_val not in profile.processed_sources:
+            profile.processed_sources.append(hash_val)
+
+    # 5. 保存 Profile (现在同时保存了新消息和新 Hash)
     save_profile(profile)
     return profile
 
