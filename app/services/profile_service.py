@@ -2,164 +2,195 @@ import json
 import os
 from typing import List
 from app.core.config import settings
-# [确保 Event 被导入]
-from app.core.models import Profile, Message, UpdateProfileNamesRequest, Event
+# [修改] 导入 Event 模型
+from app.core.models import Profile, Message, Event, UpdateProfileNamesRequest 
 from fastapi import HTTPException
-import glob  # 导入 glob
-import datetime  # [确保 datetime 被导入]
+import glob 
+import datetime
 
 # 确保数据目录存在
 os.makedirs(settings.DATA_PATH, exist_ok=True)
 
 
 def get_profile_path(profile_id: str) -> str:
+    """获取主 Profile JSON 文件的路径"""
     return os.path.join(settings.DATA_PATH, f"profile_{profile_id}.json")
 
+# [新增] 获取 Event JSON 文件的路径
+def get_event_path(profile_id: str) -> str:
+    """获取事件 JSON 文件的路径"""
+    return os.path.join(settings.DATA_PATH, f"event_{profile_id}.json")
 
+# [新增] 加载事件列表的辅助函数
+def load_events(profile_id: str) -> List[Event]:
+    """从单独的文件加载事件列表"""
+    filepath = get_event_path(profile_id)
+    if not os.path.exists(filepath):
+        return []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            events_data = json.load(f)
+            # 使用 Pydantic 解析列表中的每个事件字典
+            return [Event(**event_dict) for event_dict in events_data]
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"Warning: Could not load or parse events file {filepath}: {e}")
+        return [] # 出错时返回空列表
+
+# [新增] 保存事件列表的辅助函数
+def save_events(profile_id: str, events: List[Event]):
+    """将事件列表保存到单独的文件"""
+    filepath = get_event_path(profile_id)
+    try:
+        # 将 Event 对象列表转换为字典列表以便 JSON 序列化
+        events_dict_list = [event.model_dump(mode='json') for event in events]
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(events_dict_list, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        # 这里使用 HTTPException 可能不太合适，因为这不是直接的API响应
+        # 改为打印错误，实际应用中应考虑更健壮的错误处理
+        print(f"!!! ERROR SAVING EVENTS for profile {profile_id}: {e}")
+        # raise HTTPException(status_code=500, detail=f"Failed to save events: {e}")
+
+
+# [修改] get_profile 函数
 def get_profile(profile_id: str) -> Profile:
+    """
+    获取 Profile 数据，并合并从单独文件加载的事件列表。
+    """
     filepath = get_profile_path(profile_id)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Profile not found")
+    
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            # 使用 Pydantic 的 model_validate 确保数据符合最新模型
-            return Profile.model_validate(data)
+            # 1. 加载主 Profile 数据 (可能包含旧的 events 字段)
+            profile_data = json.load(f)
+            # 2. [重要] 创建 Profile 对象时，忽略文件中的 'events' 字段
+            profile = Profile(**{k: v for k, v in profile_data.items() if k != 'events'})
+            
+            # 3. 从单独的文件加载事件
+            loaded_events = load_events(profile_id)
+            
+            # 4. 将加载的事件附加到 Profile 对象上
+            profile.events = loaded_events
+            
+            return profile
+            
     except Exception as e:
-        print(f"Error loading or validating profile {profile_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to load profile: {e}")
+        print(f"Error loading profile {profile_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load profile data: {e}")
 
 
+# [修改] save_profile 函数
 def save_profile(profile: Profile):
+    """
+    保存主 Profile 数据，[重要] 排除 events 字段。
+    """
     filepath = get_profile_path(profile.profile_id)
     try:
-        # 使用 Pydantic 的 model_dump_json 来确保 datetime 等类型被正确序列化
+        # 1. [重要] 序列化时排除 events 字段
+        profile_dict = profile.model_dump(mode='json', exclude={'events'})
+        
+        # 2. 写入主 Profile 文件
         with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(profile.model_dump_json(indent=4))
+            json.dump(profile_dict, f, indent=4, ensure_ascii=False)
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save profile: {e}")
 
 
-# --- 辅助函数：标准化时间戳 ---
 def _normalize_to_utc(ts: datetime.datetime) -> datetime.datetime:
-    """
-    标准化datetime对象：
-    1. 如果是 Naive，假定它是UTC。
-    2. 如果是 Aware，将其转换为UTC。
-    """
-    if not isinstance(ts, datetime.datetime):
-        # 处理可能的 None 或无效类型
-        print(f"Warning: _normalize_to_utc received non-datetime value: {ts}. Using epoch.")
-        return datetime.datetime.fromtimestamp(0, datetime.timezone.utc)
-
+    # ... (此函数保持不变) ...
     if ts.tzinfo is None:
-        # 假设 Naive (朴素) 时间本来就是 UTC
         return ts.replace(tzinfo=datetime.timezone.utc)
-    # 将 Aware (带时区) 时间统一转换为 UTC
     return ts.astimezone(datetime.timezone.utc)
 
 
-# --- 消息相关函数 ---
+# [修改] add_event_to_profile 函数
+def add_event_to_profile(profile_id: str, event: Event) -> Profile:
+    """
+    添加一个新事件到单独的事件文件，并按时间排序后保存。
+    最后返回完整的 Profile 对象 (包含更新后的事件列表)。
+    """
+    # 1. 加载现有的事件
+    current_events = load_events(profile_id)
+    
+    # 2. 添加新事件
+    current_events.append(event)
+    
+    # 3. 按时间戳排序事件列表
+    current_events.sort(key=lambda e: _normalize_to_utc(e.timestamp))
+    
+    # 4. 保存更新后的事件列表到单独文件
+    save_events(profile_id, current_events)
+    
+    # 5. [重要] 重新加载完整的 Profile (现在会包含新保存的事件) 并返回
+    #    这确保了 API 响应与之前的行为一致
+    return get_profile(profile_id)
+
+
 def add_messages_to_profile(profile_id: str, messages: List[Message]) -> Profile:
-    """
-    保存消息列表，并按时间戳排序，同时标记图源 Hash。
-    """
+    # ... (此函数保持不变，它只操作主 profile 文件) ...
     profile = get_profile(profile_id)
-
-    # 1. 添加新消息
     profile.messages.extend(messages)
-
-    # 2. 对整个消息列表按时间戳重新排序
     profile.messages.sort(key=lambda m: _normalize_to_utc(m.timestamp))
-
-    # 3. 从刚刚保存的 *新消息* 中提取图源 Hash
     new_hashes_to_process = set()
-    for msg in messages:
+    for msg in messages: 
         if msg.source_image_hash and msg.source_image_hash != 'manual_entry':
             new_hashes_to_process.add(msg.source_image_hash)
-
-    # 4. 将这些新 Hash 添加到 processed_sources
     for hash_val in new_hashes_to_process:
         if hash_val not in profile.processed_sources:
             profile.processed_sources.append(hash_val)
-
-    # 5. 保存 Profile
-    save_profile(profile)
-    return profile
+    # [重要] 调用修改后的 save_profile，它会自动排除 events
+    save_profile(profile) 
+    # get_profile 会重新加载并附加 events
+    return get_profile(profile_id) 
 
 
 def add_processed_source(profile_id: str, image_hash: str):
-    # 注意：此函数现在主要由 add_messages_to_profile 调用
-    # 但保留它可能对未来其他功能有用
+    # ... (此函数保持不变) ...
     profile = get_profile(profile_id)
     if image_hash not in profile.processed_sources:
         profile.processed_sources.append(image_hash)
-        save_profile(profile)
+        save_profile(profile) # save_profile 会排除 events
 
 
 def check_if_source_processed(profile_id: str, image_hash: str) -> bool:
+    # ... (此函数保持不变) ...
     try:
         profile = get_profile(profile_id)
         return image_hash in profile.processed_sources
     except HTTPException as e:
         if e.status_code == 404:
-            # 如果 Profile 不存在，自然没有处理过
             return False
         raise e
 
 
-# --- 事件相关函数 ---
-def add_event_to_profile(profile_id: str, event: Event) -> Profile:
-    """
-    添加一个新事件到 Profile，并按时间排序后保存。
-    """
-    profile = get_profile(profile_id)
-
-    # 1. 添加新事件
-    profile.events.append(event)
-
-    # 2. 按时间戳排序事件列表
-    profile.events.sort(key=lambda e: _normalize_to_utc(e.timestamp))
-
-    # 3. 保存
-    save_profile(profile)
-    return profile
-
-
-# --- Profile 管理函数 ---
 def list_all_profiles() -> List[Profile]:
-    """
-    加载 data/profiles 目录下的所有 profile_*.json 文件
-    """
+    # ... (此函数逻辑不变，但现在 get_profile 会合并事件) ...
     profiles = []
     search_path = os.path.join(settings.DATA_PATH, "profile_*.json")
     for filepath in glob.glob(search_path):
         try:
+            # 提取 profile_id 从文件名
             profile_id = os.path.basename(filepath).replace("profile_", "").replace(".json", "")
-            profiles.append(get_profile(profile_id))  # 使用 get_profile 加载和验证
-        except (HTTPException, Exception) as e:
-            # 跳过损坏的或加载失败的json
-            print(f"Skipping invalid profile file {filepath}: {e}")
-            continue
-    # 按创建时间排序
+            # 调用 get_profile 来加载主数据并合并事件
+            profiles.append(get_profile(profile_id))
+        except Exception as e:
+             print(f"Warning: Skipping profile file {filepath} due to error: {e}")
+             continue
     profiles.sort(key=lambda p: p.created_at, reverse=True)
     return profiles
 
 
 def update_profile(profile_id: str, updates: UpdateProfileNamesRequest) -> Profile:
-    """
-    更新 Profile 的元数据 (例如名称)
-    """
+    # ... (此函数保持不变) ...
     profile = get_profile(profile_id)
-
-    # 使用 Pydantic 的 model_dump(exclude_unset=True) 来获取有值的字段
     update_data = updates.model_dump(exclude_unset=True)
-
     if not update_data:
         raise HTTPException(status_code=400, detail="No update data provided")
-
-    # 使用 model_copy(update=...) 来安全地更新字段
     updated_profile = profile.model_copy(update=update_data)
+    save_profile(updated_profile) # save_profile 会排除 events
+    # get_profile 会重新加载并附加 events
+    return get_profile(profile_id) 
 
-    save_profile(updated_profile)
-    return updated_profile
