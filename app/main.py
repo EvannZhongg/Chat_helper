@@ -1,8 +1,14 @@
 from fastapi import FastAPI
-from app.routers import import_router, profile_router
+from app.routers import import_router, profile_router, event_router # 确保导入所有三个路由
 from app.core.config import settings
 import os
-from fastapi.middleware.cors import CORSMiddleware  # 确保这个导入在顶部
+from fastapi.middleware.cors import CORSMiddleware
+
+# --- main.py: Script execution started ---
+print("--- main.py: Script execution started ---")
+
+# --- main.py: Imports completed ---
+print("--- main.py: Imports completed ---")
 
 app = FastAPI(
     title="Chat Helper API",
@@ -10,37 +16,46 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# -----------------------------------------------------------------
-# [修正] CORS 中间件必须在注册路由 (include_router) 之前添加
-# -----------------------------------------------------------------
-# origins = [
-#     "http://localhost:5175",  # <-- Add this new line
-#     "http://localhost:5174",
-#     "http://localhost:5173",
-#     "http://localhost"
-# ]
+# --- main.py: FastAPI app created ---
+print("--- main.py: FastAPI app created ---")
+
+# CORS 中间件必须在注册路由之前添加
+# 使用 "*" 允许所有源，方便本地开发
 origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # 允许访问的源
-    allow_credentials=True, # 允许 cookies
-    allow_methods=["*"],    # 允许所有方法 (GET, POST, PATCH, etc.)
-    allow_headers=["*"],    # 允许所有请求头
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-# -----------------------------------------------------------------
 
-# 注册路由 (现在在中间件之后)
+# --- main.py: CORS middleware added ---
+print("--- main.py: CORS middleware added ---")
+
+# 注册路由
 app.include_router(import_router.router)
 app.include_router(profile_router.router)
+app.include_router(event_router.router) # 确保事件路由被包含
+
+# --- main.py: Routers included ---
+print("--- main.py: Routers included ---")
 
 
 @app.on_event("startup")
 async def on_startup():
     # 确保数据目录在启动时存在
+    print("--- main.py: Startup event triggered ---")
     os.makedirs(settings.DATA_PATH, exist_ok=True)
-    print(f"Data directory '{settings.DATA_PATH}' ensured.")
-
+    print(f"--- main.py: Data directory '{settings.DATA_PATH}' ensured. ---")
 
 @app.get("/")
 async def root():
+    print("--- main.py: Root path '/' accessed ---") # 添加根路径访问日志
     return {"message": "Welcome to Chat Helper API"}
+
+# --- main.py: Script execution finished (before Uvicorn server runs app) ---
+print("--- main.py: Script execution finished (before Uvicorn server runs app) ---")
+
+

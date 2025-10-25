@@ -32,6 +32,12 @@ class Message(BaseModel):
     auto_filled_date: bool = Field(default=False)
     auto_filled_time: bool = Field(default=False)
 
+class Event(BaseModel):
+    event_id: str = Field(default_factory=lambda: f"evt_{uuid.uuid4().hex}")
+    timestamp: datetime.datetime # 由用户在前端设置
+    summary: str # 由 LLM/VLM 总结，并经用户编辑
+    original_text: Optional[str] = None # 用户输入的原始描述
+    original_image_hash: Optional[str] = None # 关联的图片 (如果有)
 
 # Profile 档案
 class Profile(BaseModel):
@@ -43,6 +49,7 @@ class Profile(BaseModel):
 
     processed_sources: List[str] = []  # 存储已处理图片的Hash
     messages: List[Message] = []
+    events: List[Event] = []
 
 class VLMUsage(BaseModel):
         prompt_tokens: int = 0
@@ -62,3 +69,4 @@ class UpdateProfileNamesRequest(BaseModel):
     profile_name: Optional[str] = None
     user_name: Optional[str] = None
     opponent_name: Optional[str] = None
+

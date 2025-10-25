@@ -71,6 +71,46 @@ VLM_CHAT_PARSE_PROMPT = """
 ```
 """
 
+# 用于纯文本事件
+LLM_EVENT_SUMMARIZE_PROMPT = """
+你是一位精干的事件总结分析师。
+请根据以下用户描述，生成一条简短、客观、第三人称的事件摘要。
+
+# 关键人物
+- '{user_name}' (在描述中可能被称为“我”)
+- '{opponent_name}' (在描述中可能被称为“对方”或相关代词)
+
+# 用户描述
+{description}
+
+# 你的任务
+请使用第三人称（例如，'{user_name} 和 {opponent_name} 进行了会议...') 来总结事件核心内容。
+摘要：
+"""
+
+# 用于图片 + 可选文本 - [注意] 这个 Prompt 将由 Python 代码动态组装
+# Base Part: 基础指令和人物介绍
+VLM_EVENT_PROMPT_BASE = """
+你是一位精干的事件总结分析师。
+请分析用户提供的图片，并结合以下信息，生成一条简短、客观、第三人称的事件摘要。
+
+# 关键人物
+- '{user_name}' (在描述中可能被称为“我”)
+- '{opponent_name}' (在描述中可能被称为“对方”或相关代词)
+"""
+
+# Description Part: 只有当用户提供了 description 时才添加
+VLM_EVENT_PROMPT_DESC_SUFFIX = """
+# 用户补充描述
+{description}
+"""
+
+# Task Part: 最终的指令
+VLM_EVENT_PROMPT_TASK = """
+# 你的任务
+请结合图片（和用户描述，如果提供）的核心内容，使用第三人称（例如，'{user_name} 在图片显示的地点...') 进行总结。
+摘要：
+"""
 
 # -----------------------------------------------
 # (未来 阶段二/三 使用的Prompt)

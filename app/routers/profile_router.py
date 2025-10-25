@@ -1,6 +1,6 @@
 from typing import List, Optional
-from fastapi import APIRouter, Body
-from pydantic import BaseModel  # <-- ADD THIS LINE
+from fastapi import APIRouter, Body, Path # 确保导入 Path
+from pydantic import BaseModel
 from app.core.models import Profile, Message, UpdateProfileNamesRequest
 from app.services import profile_service
 
@@ -10,6 +10,12 @@ class CreateProfileRequest(BaseModel):
     profile_name: str # e.g., "Boss"
     opponent_name: str # e.g., "Boss"
     user_name: str = "我"
+
+# 用于更新的Pydantic模型 (确认这个已移到 models.py)
+# class UpdateProfileNamesRequest(BaseModel):
+#     profile_name: Optional[str] = None
+#     user_name: Optional[str] = None
+#     opponent_name: Optional[str] = None
 
 @router.post("/", response_model=Profile, status_code=201)
 def create_profile(request: CreateProfileRequest):
@@ -32,27 +38,27 @@ def get_all_profiles():
     return profile_service.list_all_profiles()
 
 @router.get("/{profile_id}", response_model=Profile)
-def get_profile(profile_id: str):
+def get_profile(profile_id: str = Path(..., description="要获取的Profile ID")):
     """
-    获取指定Profile的完整数据（包括所有已保存的消息）
+    获取指定Profile的完整数据（包括所有已保存的消息和事件）
     """
     return profile_service.get_profile(profile_id)
 
 @router.post("/{profile_id}/messages", response_model=Profile)
 def save_edited_messages(
-    profile_id: str,
+    profile_id: str = Path(..., description="要保存消息的Profile ID"),
     messages: List[Message] = Body(...)
 ):
     """
     **[阶段一关键接口]**
-    保存前端编辑和确认后的消息列表。
+    保存前端编辑和确认后的消息列表 (同时会标记图源)。
     """
     return profile_service.add_messages_to_profile(profile_id, messages)
 
 @router.patch("/{profile_id}", response_model=Profile)
 def update_profile_details(
-    profile_id: str,
-    request: UpdateProfileNamesRequest
+    profile_id: str = Path(..., description="要更新名称的Profile ID"),
+    request: UpdateProfileNamesRequest = Body(...) # 确保从 Body 接收
 ):
     """
     更新Profile的名称 (我、对方、或档案名)
