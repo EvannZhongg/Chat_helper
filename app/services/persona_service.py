@@ -294,5 +294,5 @@ async def analyze_profile_incrementally(profile_id: str) -> Dict[str, Any]:
         "total_days": total_days,
         "processed_count": processed_count,
         "skipped_count": skipped_count,
-        "new_insights": [ins.model_dump(mode='json', default=str) for ins in new_insights_list] # 返回新增的 insight
+        "new_insights": [ins.model_dump(mode='json') for ins in new_insights_list] # 返回新增的 insight
     }
