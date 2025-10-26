@@ -4,6 +4,7 @@ import ProfileList from './pages/ProfileList';
 import ProfileDetail from './pages/ProfileDetail';
 import ChatUpload from './pages/ChatUpload';
 import EventUpload from './pages/EventUpload';
+import AnalysisPage from './pages/AnalysisPage';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
             <Route path="/profile/:profileId" element={<ProfileDetail />} />
             <Route path="/profile/:profileId/upload" element={<ChatUpload />} />
             <Route path="/profile/:profileId/events/new" element={<EventUpload />} />
+            <Route path="/profile/:profileId/analyze" element={<AnalysisPage />} />
           </Routes>
         </main>
       </div>

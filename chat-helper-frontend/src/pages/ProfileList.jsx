@@ -1,30 +1,42 @@
-import React, { useEffect, useState } from 'react';
-// [新增] 导入 useNavigate
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useProfileStore } from '../store/profileStore';
 import ProfileForm from '../components/ProfileForm';
 
 function ProfileList() {
-  const { profiles, fetchProfiles, isLoading } = useProfileStore();
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  // 显式选择状态和 actions
+  const profiles = useProfileStore(state => state.profiles);
+  const fetchProfiles = useProfileStore(state => state.fetchProfiles);
+  const isLoading = useProfileStore(state => state.isLoading);
+  const createProfile = useProfileStore(state => state.createProfile);
 
-  // [新增] 初始化 navigate
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchProfiles();
+  // [修复] 使用 useCallback 封装 fetchProfiles 调用
+  const stableFetchProfiles = useCallback(() => {
+    if (typeof fetchProfiles === 'function') {
+      fetchProfiles();
+    } else {
+      console.error("useEffect: fetchProfiles is not available yet, waiting for next render cycle.");
+    }
   }, [fetchProfiles]);
 
-  const handleCreateProfile = async (data) => {
-    // 1. 调用 store action
-    const newProfile = await useProfileStore.getState().createProfile(data);
+  useEffect(() => {
+    stableFetchProfiles(); // 首次挂载时调用封装函数
+  }, [stableFetchProfiles]); // 依赖 memoized function
 
-    // 2. [新增] 检查返回的 profile 并跳转
-    if (newProfile && newProfile.profile_id) {
-      navigate(`/profile/${newProfile.profile_id}`);
+  const handleCreateProfile = async (data) => {
+    if (typeof createProfile === 'function') {
+        const newProfile = await createProfile(data);
+        if (newProfile && newProfile.profile_id) {
+          navigate(`/profile/${newProfile.profile_id}`);
+        } else {
+          alert("创建失败，请重试");
+        }
     } else {
-      // 如果创建失败，表单不隐藏，提示用户
-      alert("创建失败，请重试");
+        console.error("handleCreateProfile: createProfile action is not available.");
+        alert("创建失败，请重试");
     }
   };
 
@@ -41,20 +53,17 @@ function ProfileList() {
 
       {showCreateForm && (
         <ProfileForm
-          // [修改] 调用新的 handler
           onSubmit={handleCreateProfile}
         />
       )}
 
       <hr />
 
-      {/* [修改] 使用 className */}
       <div className="profile-list">
-        {profiles.map((profile) => (
+        {Array.isArray(profiles) && profiles.map((profile) => (
           <Link
             to={`/profile/${profile.profile_id}`}
             key={profile.profile_id}
-            // [修改] 使用 className
             className="profile-card"
           >
             <strong>{profile.profile_name}</strong>
@@ -62,6 +71,9 @@ function ProfileList() {
             <span>({profile.user_name} vs {profile.opponent_name})</span>
           </Link>
         ))}
+        {!isLoading && (!profiles || profiles.length === 0) && (
+            <p>还没有 Profile，请点击上方按钮新建一个。</p>
+        )}
       </div>
     </div>
   );
