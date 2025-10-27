@@ -14,6 +14,11 @@ export const useProfileStore = create((set, get) => ({
   isInsightLoading: false,
   analysisDateRange: { min_date: null, max_date: null },
   analysisProgress: null,
+  isAssisting: false,
+  assistResult: null,
+  // --- [新增] Timeline States ---
+  timelineData: [],
+  isTimelineLoading: false,
 
   // --- Main Profile Actions (Original, untouched) ---
 
@@ -181,4 +186,42 @@ export const useProfileStore = create((set, get) => ({
         set({ isPersonaLoading: false, analysisProgress: "分析失败: " + errorMsg });
       }
     },
+
+  // --- [Phase 3: New Actions] ---
+  getAssistance: async (profileId, opponent_message, user_thoughts) => {
+    set({ isAssisting: true, assistResult: null });
+    try {
+      const response = await apiClient.post(`/assist/${profileId}`, {
+        opponent_message,
+        user_thoughts
+      });
+      set({ assistResult: response.data, isAssisting: false });
+    } catch (error) {
+      console.error("Failed to get assistance:", error);
+      alert("获取建议失败: " + (error.response?.data?.detail || error.message));
+      set({ isAssisting: false });
+    }
+  },
+
+  clearAssistResult: () => {
+    set({ assistResult: null });
+  },
+
+  // --- [新增] Timeline Actions ---
+  fetchTimelineData: async (profileId) => {
+    set({ isTimelineLoading: true, timelineData: [] });
+    try {
+      const response = await apiClient.get(`/timeline/${profileId}`);
+      set({ timelineData: response.data, isTimelineLoading: false });
+    } catch (error) {
+      console.error("Failed to fetch timeline data:", error);
+      alert("加载时间线失败: " + (error.response?.data?.detail || error.message));
+      set({ isTimelineLoading: false });
+    }
+  },
+
+  clearTimelineData: () => {
+    set({ timelineData: [] });
+  },
+
 }));

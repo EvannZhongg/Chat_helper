@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProfileStore } from '../store/profileStore';
 import ProfileForm from '../components/ProfileForm';
-// 不再需要 shallow
 
 // 辅助函数
 function getLocalDateForInput(date = new Date()) {
@@ -19,12 +18,10 @@ function ProfileDetail() {
   const currentProfile = useProfileStore(state => state.currentProfile); // Hook 2
   const currentUserPersona = useProfileStore(state => state.currentUserPersona); // Hook 3
   const currentOpponentPersona = useProfileStore(state => state.currentOpponentPersona); // Hook 4
-  // insights 不再需要
 
   // 2. 单独选择加载状态
   const isLoading = useProfileStore(state => state.isLoading); // Hook 5
   const isPersonaLoading = useProfileStore(state => state.isPersonaLoading); // Hook 6
-  // isInsightLoading 不再需要
 
   // 3. 单独选择 actions
   const getProfile = useProfileStore(state => state.getProfile); // Hook 7
@@ -32,7 +29,11 @@ function ProfileDetail() {
   const updateUserPersona = useProfileStore(state => state.updateUserPersona); // Hook 9
   const updateOpponentPersona = useProfileStore(state => state.updateOpponentPersona); // Hook 10
   const updateProfileNames = useProfileStore(state => state.updateProfileNames); // Hook 11
-  // fetchInsights, resetFetchFlags, triggerRangeAnalysis 不再需要
+
+  // [!!] 从 AnalysisPage.jsx 移回来的 Hooks，用于 ProfileDetail
+  const fetchDateRange = useProfileStore(state => state.fetchDateRange);
+  const fetchInsights = useProfileStore(state => state.fetchInsights);
+
 
   // --- 本地状态 ---
   const [isEditing, setIsEditing] = useState(false); // Hook 12
@@ -41,28 +42,35 @@ function ProfileDetail() {
 
   // --- Effects ---
   useEffect(() => { // Hook 15
-    // console.log("Effect running for profileId:", profileId);
     if (profileId) {
         getProfile(profileId);
         fetchPersonas(profileId);
     }
     // Cleanup function
     return () => {
-        // console.log("ProfileDetail cleanup for profileId:", profileId);
+        // (cleanup)
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId]); // <-- 只依赖 profileId
+
+  // [!!] 新增 Effect: 当 profile 加载成功后，获取 insights 和 daterange
+  // (这在 AnalysisPage 中也有，但放在这里可以为其他组件预热)
+  useEffect(() => {
+    if (!currentProfile || currentProfile.profile_id !== profileId) return;
+    fetchDateRange(profileId);
+    fetchInsights(profileId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProfile?.profile_id, profileId]);
+
 
   // --- [关键修复] 条件渲染逻辑现在位于所有 Hooks 调用之后 ---
   if (isLoading && !currentProfile) {
      return <div>Loading profile...</div>;
   }
-  // 检查 profileId 是否匹配 store 中的 ID，避免导航时闪烁 "not found"
   const storeProfileId = useProfileStore.getState().currentProfile?.profile_id;
   if (!isLoading && !currentProfile && profileId === storeProfileId) {
       return <div>Profile not found or failed to load.</div>;
   }
-  // 如果 profile 尚未加载完成（可能是初始渲染或 ID 刚改变），等待
   if (!currentProfile) {
      return <div>Loading...</div>; // 或者返回 null
   }
@@ -90,7 +98,18 @@ function ProfileDetail() {
   return (
     <div>
       <Link to="/">&lt; 返回列表</Link>
-      <h2>{currentProfile.profile_name}</h2>
+
+      {/* --- [新增] 标题和时间线按钮 --- */}
+      <div className="profile-header-actions">
+        <h2>{currentProfile.profile_name}</h2>
+        <Link to={`/profile/${profileId}/timeline`}>
+          <button className="timeline-nav-btn">
+            查看时间线
+          </button>
+        </Link>
+      </div>
+      {/* --- 修改结束 --- */}
+
 
       {/* --- 操作选项 --- */}
       <h3>操作选项</h3>
@@ -104,7 +123,9 @@ function ProfileDetail() {
         <Link to={`/profile/${profileId}/analyze`}>
             <button>自动分析与洞察 (Phase 2)</button>
         </Link>
-        <button disabled>对话辅助 (Phase 3)</button>
+        <Link to={`/profile/${profileId}/assist`}> {/* 激活 Phase 3 按钮 */}
+            <button>对话辅助 (Phase 3)</button>
+        </Link>
       </nav>
 
       <hr />

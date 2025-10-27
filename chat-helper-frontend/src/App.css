@@ -370,3 +370,182 @@ button.secondary:hover {
   border-radius: 4px;
   background-color: #fafafa;
 }
+/* ---
+[修改] React Flow 知识图谱样式 - 圆形节点
+--- */
+
+/* 1. 自定义节点基础样式 (保持不变) */
+.graph-node {
+  border: 1px solid #ddd;
+  border-radius: 8px; /* 默认圆角给详情节点用 */
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  font-size: 12px;
+  /* min-width: 150px; // 圆形节点不需要最小宽度 */
+}
+
+/* 2. 日期节点样式 - 改为圆形 */
+.date-node {
+  background: linear-gradient(to bottom, #e6f2ff, #cce4ff); /* 调整渐变色 */
+  border-color: #a8cfff;
+  /* 使其变为圆形 */
+  width: 90px; /* 固定宽度 */
+  height: 90px; /* 固定高度 */
+  border-radius: 50%; /* 圆形的关键 */
+  display: flex; /* 使用 Flex 布局使内容居中 */
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 10px; /* 内边距 */
+  box-sizing: border-box; /* 让 padding 包含在宽高内 */
+  position: relative; /* 为了 Tooltip 定位 */
+  cursor: pointer; /* 添加手型光标 */
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out; /* 添加过渡效果 */
+}
+/* 添加悬浮效果 */
+.date-node:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 10px rgba(0, 123, 255, 0.2);
+}
+
+.date-node .node-content strong {
+  font-size: 1.1em;
+  color: #004a99; /* 加深颜色 */
+  display: block; /* 让日期独占一行 */
+  margin-bottom: 3px;
+}
+/* (子文本样式保持不变) */
+.date-node .node-subtext {
+  font-size: 0.8em;
+  color: #555;
+}
+
+
+/* 3. 悬浮提示框 (Tooltip) 样式 - 调整位置 */
+.graph-tooltip {
+  position: absolute;
+  /* bottom: 110%; // 改为在右侧显示 */
+  left: 115%; /* 出现在节点右侧 */
+  top: 50%;
+  transform: translateY(-50%); /* 垂直居中 */
+  background: rgba(0, 0, 0, 0.8); /* 加深背景 */
+  color: white;
+  padding: 8px 12px; /* 调整内边距 */
+  border-radius: 4px;
+  font-size: 0.9em; /* 稍微增大字体 */
+  white-space: pre-wrap; /* 支持换行 */
+  z-index: 10;
+  pointer-events: none; /* 防止干扰鼠标事件 */
+  width: max-content; /* 宽度自适应 */
+  max-width: 250px; /* 最大宽度 */
+  opacity: 0; /* 默认隐藏 */
+  transition: opacity 0.2s ease-in-out; /* 添加淡入效果 */
+}
+/* 悬浮时显示 Tooltip */
+.date-node:hover .graph-tooltip {
+    opacity: 1;
+}
+
+/* 4. 详情节点样式 (保持不变) */
+.detail-node {
+  background: #fdfdfd;
+  width: 280px; /* 固定宽度 */
+  max-height: 200px; /* 最大高度 */
+  display: flex;
+  flex-direction: column;
+}
+.detail-node-title {
+  font-weight: bold;
+  padding: 8px 12px;
+  background: #f1f1f1;
+  border-bottom: 1px solid #eee;
+}
+.detail-node-content {
+  padding: 10px;
+  overflow-y: auto; /* 内容超出时滚动 */
+  flex-grow: 1;
+}
+
+/* 5. 详情节点内的项目样式 (保持不变) */
+/* ... (detail-item, detail-item-time, detail-item-text 保持不变) ... */
+.detail-item {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #eee;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.detail-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+.detail-item-time {
+  font-family: monospace;
+  font-size: 0.85em;
+  background: #e9ecef;
+  padding: 2px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.detail-item-text {
+  line-height: 1.4;
+  white-space: pre-wrap; /* 保留换行 */
+  flex-grow: 1;
+}
+
+
+/* 6. 详情节点内的标签样式 (保持不变) */
+/* ... (detail-tag, event-tag, sender-tag 等保持不变) ... */
+.detail-tag {
+  font-size: 0.75em;
+  font-weight: bold;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: white;
+  display: inline-block; /* 确保标签有背景 */
+  margin-right: 5px;
+}
+.detail-tag.event-tag {
+  background-color: #ffc107; /* 黄色 */
+  color: #333;
+}
+.detail-tag.sender-tag.type-User_1 {
+  background-color: #007bff; /* 蓝色 (我) */
+}
+.detail-tag.sender-tag.type-User_2 {
+  background-color: #28a745; /* 绿色 (对方) */
+}
+.detail-tag.sender-tag.type-system {
+  background-color: #6c757d; /* 灰色 (系统) */
+}
+
+
+/* React Flow 默认 Handle 样式微调 (保持不变) */
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: #adb5bd;
+}
+
+/* ProfileDetail 按钮样式 (保持不变) */
+.profile-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+}
+.profile-header-actions h2 {
+  margin: 0;
+}
+.timeline-nav-btn {
+  background-color: #17a2b8; /* 青色 */
+  font-size: 0.9em;
+  padding: 8px 12px;
+}
+.timeline-nav-btn:hover {
+  background-color: #138496;
+}
