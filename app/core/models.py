@@ -104,21 +104,15 @@ class ContextualInsight(BaseModel):
     """
     insight_id: str = Field(default_factory=lambda: f"ins_{uuid.uuid4().hex}")
     profile_id: str
+    analysis_date: datetime.date  # 分析的日期 (YYYY-MM-DD)
+    summary: str  # LLM 生成的总结
+    processed_item_ids: Set[str] = Field(default_factory=set)  # 当天处理过的 Message 和 Event ID
 
-    # [修改] 分析的日期 (YYYY-MM-DD 格式的日期对象)
-    analysis_date: datetime.date
+    # [!! 新增 !!] 重要性评分
+    importance_score: int = Field(default=0, description="基于当天消息(1分)和事件(10分)数量计算的重要性评分")
 
-    # LLM 生成的总结
-    summary: str
-
-    # [新增] 当天处理过的所有 Message 和 Event 的 ID 集合
-    # 用于后续增量分析时识别哪些数据已被纳入此 Insight
-    processed_item_ids: Set[str] = Field(default_factory=set)
-
-    # 创建时间
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
-    # [新增] Pydantic 配置，允许 Set 类型
     model_config = {
         "arbitrary_types_allowed": True
     }

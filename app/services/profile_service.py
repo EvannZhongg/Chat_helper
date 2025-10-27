@@ -136,7 +136,10 @@ def get_insights_path(profile_id: str) -> str:
     return os.path.join(settings.DATA_PATH, f"insights_{profile_id}.json")
 
 def load_insights(profile_id: str) -> List[ContextualInsight]:
-    """从单独的文件加载上下文洞察列表"""
+    """
+    [修改后] 从单独的文件加载上下文洞察列表。
+    兼容旧数据（可能没有 importance_score 字段）。
+    """
     filepath = get_insights_path(profile_id)
     if not os.path.exists(filepath):
         return []
@@ -145,30 +148,39 @@ def load_insights(profile_id: str) -> List[ContextualInsight]:
             data_list = json.load(f)
             insights = []
             for data in data_list:
-                # [修改] 手动处理日期和 Set 的转换
+                # 手动处理日期和 Set 的转换 (保持不变)
                 data['analysis_date'] = datetime.date.fromisoformat(data['analysis_date'])
-                data['processed_item_ids'] = set(data.get('processed_item_ids', [])) # 兼容旧数据
-                insights.append(ContextualInsight(**data))
+                data['processed_item_ids'] = set(data.get('processed_item_ids', []))
+
+                # [!! 新增 !!] 为旧数据提供 importance_score 默认值
+                # 如果 JSON 中没有 'importance_score' 键，Pydantic 会使用模型定义的默认值 (0)
+                # 但为了更明确，我们也可以在这里显式处理 .get()
+                # data['importance_score'] = data.get('importance_score', 0) # 这行其实 Pydantic 会自动做
+
+                # 使用 Pydantic 解析，它会自动处理缺失字段的默认值
+                try:
+                    insights.append(ContextualInsight(**data))
+                except Exception as pydantic_error: # 捕获可能的 Pydantic 解析错误
+                    print(f"Warning: Could not parse insight data: {data}. Error: {pydantic_error}")
+                    continue # 跳过无法解析的数据
+
             return insights
     except Exception as e:
         print(f"Warning: Could not load or parse insights {filepath}: {e}")
         return []
 
 def save_insights(profile_id: str, insights: List[ContextualInsight]):
-    """将上下文洞察列表保存到单独的文件"""
+    """将上下文洞察列表保存到单独的文件。(通常无需修改)"""
     filepath = get_insights_path(profile_id)
     try:
         def json_serializer(obj):
-            """JSON 序列化器，处理 date 和 set"""
-            if isinstance(obj, datetime.date):
-                return obj.isoformat()
-            if isinstance(obj, set):
-                return list(obj) # 将 set 转为 list 存储
+            if isinstance(obj, datetime.date): return obj.isoformat()
+            if isinstance(obj, set): return list(obj)
             raise TypeError(f"Type {type(obj)} not serializable")
 
         with open(filepath, 'w', encoding='utf-8') as f:
-            # [修改] 使用 default=json_serializer 处理特殊类型
             json.dump(
+                # model_dump 会自动包含 importance_score
                 [item.model_dump(mode='json') for item in insights],
                 f, indent=4, ensure_ascii=False, default=json_serializer
             )
